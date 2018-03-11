@@ -1,0 +1,112 @@
+---
+title: "practica_preparacion_datos"
+author: "Jesus Manuel Vicente Garcia"
+date: "1 de marzo de 2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r Directorio de trabajo, comprobación y lectura del fichero}
+#Establecemos nuestro directorio de trabajo
+currentDir <- getwd()
+currentDir
+
+#Comprobamos que el fichero está en el directorio 'datos'
+if (!file.exists("./datos/messy_data.csv")) {
+stop(paste0("Se necesita que messy_data.csv esté en:
+",currentDir, "/datos"))
+}
+
+#Leemos el fichero
+con <- file("./datos/messy_data.csv","r")
+messyData <- read.csv(con, header = TRUE, sep = ",", quote = "\"")
+close(con)
+
+```
+
+
+```{r Preparación y limpieza}
+library(tidyr)
+library(data.table)
+library(stringr)
+
+summary(messyData)
+
+#Lo primero que observamos es que los nombres de las columnas son confusos. Debemos cambiarlos
+names(messyData) = c("Year","Area","Street","Street2","StrangeHTML")
+
+#A continuación comprobamos las clases que tienen las columnas del dataset.
+lapply(messyData,class)
+
+#Vemos que excepto el campo Year, todos son factores. No es correctos, debemos cambiarlas a 'character'
+
+messyData$Area <- as.character(messyData$Area)
+messyData$Street <- as.character(messyData$Street)
+messyData$Street2 <- as.character(messyData$Street2)
+messyData$StrangeHTML <- as.character(messyData$StrangeHTML)
+
+lapply(messyData,class)
+
+
+#Lo siguiente que haremos será eliminar los Missing Vaues o NA, en caso de que los haya
+rowNaMessyData <- messyData[rowSums(is.na(messyData)) > 0, ]
+dim(rowNaMessyData) #No hay filas con NA
+
+colNaMessyData <- messyData[colSums(is.na(messyData)) > 0, ]
+dim(colNaMessyData) #No hay columnas con Na
+
+#Observamos que la columna 'Street' contiene la misma información que la columna Street2 pero con caractares raros. No nos aporta ningna información, por lo que la eliminaremos
+#De igual forma, la columa 'StrangeHTML' tampoco nos aporta información, por lo que también la eliminaremos
+tidyData <- messyData[ ,!colnames(messyData)=="Street" & !colnames(messyData)=="StrangeHTML" ]
+
+#Observamos que el campo Area tiene casi todas los valores vacíos, mientras que el resto de valores aparecen el mismo número de veces. Teniendo en cuenta esto, se hace muy dificil rellenar la columna con algún valor, por lo que vamos a prescindir de ella también.
+table(tidyData$Area)
+
+tidyData <- tidyData[ ,!colnames(tidyData)=="Area"]
+
+## Podemos ver en la columna 'street' que algunos valores incluyen además el barrio al que pertenecen. Crearemos una nueva columna para el barrio, separando a partir de la ','
+tidyData <- data.table(separate(tidyData, Street2, c("Street","Neighbourhood"),sep=','))
+
+
+## Eliminamos los valores NA de la columna 'neighbourhood'
+nomissingTidyData <- complete.cases(tidyData)
+tidyDataNoNA <- tidyData[nomissingTidyData,]
+
+
+#Pasamos a minúsculas los nombres de los campos Street y Neighbourhood
+tidyDataNoNA$Street<- tolower(tidyDataNoNA$Street)
+tidyDataNoNA$Neighbourhood<- tolower(tidyDataNoNA$Neighbourhood)
+
+#Eliminamos los signoss de puntuacion, espacios innecesarios y caracteres especiales de los campos Street y Neighbourhoud
+tidyDataNoNA$Street <- gsub('\\.','',tidyDataNoNA$Street)
+tidyDataNoNA$Street <- gsub("[[:punct:]]",'',tidyDataNoNA$Street)
+tidyDataNoNA$Street <- str_trim(tidyDataNoNA$Street)
+
+tidyDataNoNA$Neighbourhood <- gsub('\\.','',tidyDataNoNA$Neighbourhood)
+tidyDataNoNA$Neighbourhood <- gsub("[[:punct:]]",'',tidyDataNoNA$Neighbourhood)
+tidyDataNoNA$Neighbourhood <- str_trim(tidyDataNoNA$Neighbourhood)
+
+
+## Ahora eliminamos las filas duplicadas
+tidyDataNoNA <- unique(tidyDataNoNA)
+
+## Ya tenemos un dataset limpio para poder realizar análisis. Los datos de este dataset no nos permiten realizar análisis muy exhaustivos ni obtener información de especial relevancia, ya que unicamente contamos con años calles y barrios. Nos permitiría realizar análisis sencillos, como obtener los barrios que cuentan con mayor número de calles, o un análisis temporal del número de calles por barrio si tuviéramos más años en el dataset.
+
+## Exportamos nuestro tidy dataset resultante a un archivo CSV
+outputDir <- "./datos/output"
+if (!file.exists(outputDir)) {
+dir.create(outputDir)
+}
+write.table(tidyDataNoNA,
+file=paste(outputDir,
+"tidyData.csv",
+sep="/"),
+sep=";",row.names=FALSE)
+
+
+
+```
+
+
+
